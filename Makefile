@@ -1,0 +1,2 @@
+run:
+	xhost +local:docker

@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+    environment:
+      DISPLAY: $DISPLAY
+      NVIDIA_VISIBLE_DEVICES: all
+    runtime: nvidia
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./:/app
