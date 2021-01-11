@@ -13,7 +13,7 @@ from displayer import Displayer
 
 
 class App:
-    def __init__(self, model_checkpoint, fake_camera_device):
+    def __init__(self, model_checkpoint, input_camera_device_id, fake_camera_device):
         self.tensor = ToTensor()
         device = torch.device("cuda")
         self.precision = torch.float16
@@ -30,12 +30,15 @@ class App:
         self.padding = [0, 0, w, h]
         self.size = [h, w]
 
-        self.cam = Camera(width=self.width, height=self.height)
-        fake_camera = pyfakewebcam.FakeWebcam(fake_camera_device, self.width, self.height)
+        self.cam = Camera(
+            device_id=input_camera_device_id, width=self.width, height=self.height
+        )
+        fake_camera = pyfakewebcam.FakeWebcam(
+            fake_camera_device, self.width, self.height
+        )
         self.dsp = Displayer(fake_camera, w, h)
-        
+
         self.bgr = None
-        
 
     def step(self, sct):
         if self.dsp.appMode == "normal":
@@ -55,12 +58,12 @@ class App:
 
             if self.dsp.composeMode == "screen":
                 tgt = self.cv2_frame_to_cuda(np.array(sct.grab(sct.monitors[1])))
-                tgt = Resize([self.height, self.width])(tgt)
+                tgt = TF.resize(tgt, [self.height, self.width])
 
             elif self.dsp.composeMode == "image" and self.dsp.imageFilename:
                 tgt = cv2.imread(self.dsp.imageFilename)
                 tgt = self.cv2_frame_to_cuda(tgt)
-                tgt = Resize([self.height, self.width])(tgt)
+                tgt = TF.resize(tgt, [self.height, self.width])
 
             layer1 = TF.pad(TF.resize(pha * fgr, self.size), self.padding, 0)
             layer2 = TF.pad(TF.resize(1 - pha, self.size), self.padding, 1)
@@ -89,5 +92,6 @@ class App:
                     self.step(sct)
 
 
-app = App("torchscript_mobilenetv2_fp16.pth", "/dev/video20")
+app = App("torchscript_mobilenetv2_fp16.pth", 2, "/dev/video20")
+
 app.run()

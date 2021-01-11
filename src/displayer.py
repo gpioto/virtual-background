@@ -42,7 +42,7 @@ class Displayer:
         self.composeModeIndex = self.appModeIndex = 0
         self.imageFilename = None
         self.webcam = webcam
-        self.isFlipped = False
+        self.flipFactor = 1
 
     # Update the currently showing frame and return key press char code
     def step(self, image):
@@ -65,13 +65,10 @@ class Displayer:
 
     def changeComposeMode(self):
         self.composeModeIndex = (self.composeModeIndex + 1) % len(self.COMPOSE_MODES)
-    
+
     def selectBackground(self):
         self.imageFilename = tkinter.filedialog.askopenfilename()
-        print("filename: " + self.imageFilename + "====")
-        print(self.imageFilename == "")
-        print(not self.imageFilename)
- 
+
     @property
     def composeMode(self):
         return self.COMPOSE_MODES[self.composeModeIndex]
@@ -80,14 +77,18 @@ class Displayer:
     def appMode(self):
         return self.APP_MODES[self.appModeIndex]
 
+    @property
+    def isFlipped(self):
+        return self.flipFactor == -1
+
     def leftClick(self, event):
         self.previousX, self.previousY = event.x, event.y
 
     def rightClick(self, event):
-        self.isFlipped = not self.isFlipped
+        self.flipFactor *= -1
 
     def mouseMove(self, event):
-        self.x = self.x + event.x - self.previousX
+        self.x += self.flipFactor * (event.x - self.previousX)
         self.y += event.y - self.previousY
         self.previousX, self.previousY = event.x, event.y
 
