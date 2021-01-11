@@ -3,3 +3,4 @@ opencv-python==4.4.0.44
 torchvision==0.8.1
 Pillow==8.0.1
 mss
+pyfakewebcam

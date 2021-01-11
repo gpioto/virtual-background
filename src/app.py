@@ -2,16 +2,18 @@ import torch
 import cv2
 import numpy as np
 import mss
+import pyfakewebcam
 
 from torch import nn
-from torchvision.transforms import ToTensor, Resize, Pad
+from torchvision.transforms import ToTensor
+import torchvision.transforms.functional as TF
 
 from camera import Camera
 from displayer import Displayer
 
 
 class App:
-    def __init__(self, model_checkpoint, background_output):
+    def __init__(self, model_checkpoint, fake_camera_device):
         self.tensor = ToTensor()
         device = torch.device("cuda")
         self.precision = torch.float16
@@ -29,15 +31,14 @@ class App:
         self.size = [h, w]
 
         self.cam = Camera(width=self.width, height=self.height)
-        self.dsp = Displayer("MattingV2", w, h)
+        fake_camera = pyfakewebcam.FakeWebcam(fake_camera_device, self.width, self.height)
+        self.dsp = Displayer(fake_camera, w, h)
         
         self.bgr = None
-        tgt = cv2.imread(background_output)
-        tgt = self.cv2_frame_to_cuda(tgt)
-        tgt = Resize([self.height, self.width])(tgt)
+        
 
     def step(self, sct):
-        if self.dsp.state == True:
+        if self.dsp.appMode == "normal":
             self.bgr = None
             frame = self.cam.read()
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -46,20 +47,29 @@ class App:
             frame = self.cam.read()
             self.bgr = self.cv2_frame_to_cuda(frame)
         else:
-            pad0 = Pad(self.padding, 0)
-            pad1 = Pad(self.padding, 1)
-            resize = Resize(self.size)
-
             frame = self.cam.read()
             src = self.cv2_frame_to_cuda(frame)
             pha, fgr = self.model(src, self.bgr)[:2]
 
-            tgt = self.cv2_frame_to_cuda(np.array(sct.grab(sct.monitors[1])))
-            tgt = Resize([self.height, self.width])(tgt)
+            tgt = torch.ones_like(fgr)
 
-            layer1 = pad0(resize(pha * fgr))
-            layer2 = pad1(resize(1 - pha)) * tgt
-            res = layer1 + layer2
+            if self.dsp.composeMode == "screen":
+                tgt = self.cv2_frame_to_cuda(np.array(sct.grab(sct.monitors[1])))
+                tgt = Resize([self.height, self.width])(tgt)
+
+            elif self.dsp.composeMode == "image" and self.dsp.imageFilename:
+                tgt = cv2.imread(self.dsp.imageFilename)
+                tgt = self.cv2_frame_to_cuda(tgt)
+                tgt = Resize([self.height, self.width])(tgt)
+
+            layer1 = TF.pad(TF.resize(pha * fgr, self.size), self.padding, 0)
+            layer2 = TF.pad(TF.resize(1 - pha, self.size), self.padding, 1)
+
+            if self.dsp.isFlipped:
+                layer1 = TF.hflip(layer1)
+                layer2 = TF.hflip(layer2)
+
+            res = layer1 + layer2 * tgt
             res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
 
             x, y, w, h = self.dsp.step(res)
@@ -75,9 +85,9 @@ class App:
     def run(self):
         with torch.no_grad():
             with mss.mss(display=":0.0") as sct:
-                while True:
+                while self.dsp.isRunning:
                     self.step(sct)
 
 
-app = App("torchscript_mobilenetv2_fp16.pth", "demo_image.jpg")
+app = App("torchscript_mobilenetv2_fp16.pth", "/dev/video20")
 app.run()
